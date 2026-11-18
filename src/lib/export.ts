@@ -2,7 +2,6 @@ import type { Account, SnapshotDiff } from './types';
 import { snapshotDate } from './analysis';
 import { fmtDate, fmtNumber, fmtUnixDate } from './format';
 import { profileUrl } from './username';
-import { countryName } from './geo';
 
 const CATEGORY_LABEL: Record<Account['category'], string> = {
   'not-following-back': 'Not following back',
@@ -13,7 +12,7 @@ const CATEGORY_LABEL: Record<Account['category'], string> = {
 };
 
 export function reasonLabel(a: Account): string {
-  return a.reasons.map((r) => (r === 'verified' ? 'Verified account' : 'More than 100,000 followers')).join(' · ');
+  return a.reasons.map((r) => (r === 'verified' ? 'Verified account' : 'More than 50,000 followers')).join(' · ');
 }
 
 export function csvCell(v: string | number | undefined | null): string {
@@ -47,17 +46,15 @@ function accountRow(a: Account) {
     category: CATEGORY_LABEL[a.category],
     reason: reasonLabel(a),
     followed: a.followedAt ? new Date(a.followedAt * 1000).toISOString().slice(0, 10) : '',
-    country: a.meta?.country ? countryName(a.meta.country) : '',
   };
 }
 
 export function exportAccountsCsv(title: string, accounts: Account[]) {
-  const withCountry = accounts.some((a) => a.meta?.country);
-  const header = ['Username', 'Profile URL', 'Display name', 'Followers', 'Verified', 'Category', 'Exclusion reason', 'Date you followed', ...(withCountry ? ['Country'] : [])];
+  const header = ['Username', 'Profile URL', 'Display name', 'Followers', 'Verified', 'Category', 'Exclusion reason', 'Date you followed'];
   const lines = [header.map(csvCell).join(',')];
   for (const a of accounts) {
     const r = accountRow(a);
-    lines.push([r.username, r.profile, r.displayName, r.followers, r.verified, r.category, r.reason, r.followed, ...(withCountry ? [r.country] : [])].map(csvCell).join(','));
+    lines.push([r.username, r.profile, r.displayName, r.followers, r.verified, r.category, r.reason, r.followed].map(csvCell).join(','));
   }
   download(`followly-${slug(title)}-${stamp()}.csv`, new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
 }

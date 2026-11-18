@@ -1,6 +1,5 @@
 import type { AccountMeta, MetaMap } from './types';
 import { normalizeUsername, usernameFromHref } from './username';
-import { normalizeCountry } from './geo';
 
 /**
  * Metadata providers supply follower counts / verification status from a legitimate,
@@ -92,14 +91,8 @@ const HEADER_ALIASES: Record<string, string[]> = {
   followers: ['followers', 'follower_count', 'followers_count', 'followercount', 'follower count'],
   verified: ['verified', 'is_verified', 'isverified', 'verification'],
   displayName: ['display_name', 'name', 'full_name', 'displayname', 'display name', 'full name'],
-  country: ['country', 'country_code', 'countrycode', 'country code', 'country_name', 'nation', 'location'],
 };
 
-/** Country-level only: “Paris, France” keeps “France” and discards the city. */
-function parseCountry(v: unknown): string | null {
-  if (typeof v !== 'string' || !v.trim()) return null;
-  return normalizeCountry(v) ?? normalizeCountry(v.split(',').pop() ?? '');
-}
 
 export interface ImportResult {
   meta: MetaMap;
@@ -111,11 +104,10 @@ export interface ImportResult {
 
 /**
  * Import metadata from a CSV (header row required) or JSON array.
- * Columns: username + any of followers, verified, display_name, country.
- * Country values are ignored when geographic analytics are turned off.
+ * Columns: username + any of followers, verified, display_name.
  */
 export function importMetadataFile(text: string, fileName: string, opts: { includeCountry?: boolean } = {}): ImportResult {
-  const includeCountry = opts.includeCountry ?? true;
+  void opts;
   const now = Date.now();
   const source = `file:${fileName}`;
   const meta: MetaMap = {};
@@ -130,10 +122,6 @@ export function importMetadataFile(text: string, fileName: string, opts: { inclu
     if (c !== undefined) m.followerCount = c;
     if (v !== undefined) m.verified = v;
     if (typeof name === 'string' && name.trim()) m.displayName = name.trim();
-    if (includeCountry && typeof country === 'string' && country.trim()) {
-      const code = parseCountry(country);
-      if (code) { m.country = code; countriesFound++; } else unrecognized++;
-    }
     if (m.followerCount === undefined && m.verified === undefined && !m.displayName && !m.country) { skipped++; return; }
     meta[u] = m;
   };
@@ -157,9 +145,9 @@ export function importMetadataFile(text: string, fileName: string, opts: { inclu
     if (rows.length < 2) throw new Error('The CSV needs a header row and at least one account.');
     const header = rows[0].map((h) => h.trim().toLowerCase());
     const col = (key: string) => header.findIndex((h) => HEADER_ALIASES[key].includes(h));
-    const iu = col('username'), ifo = col('followers'), iv = col('verified'), id = col('displayName'), ic = col('country');
+    const iu = col('username'), ifo = col('followers'), iv = col('verified'), id = col('displayName'), ic = -1;
     if (iu < 0) throw new Error('The CSV needs a “username” column.');
-    if (ifo < 0 && iv < 0 && id < 0 && ic < 0) throw new Error('Add at least one of these columns: followers, verified, display_name, country.');
+    if (ifo < 0 && iv < 0 && id < 0 && ic < 0) throw new Error('Add at least one of these columns: followers, verified, display_name.');
     const at = (r: string[], i: number) => (i >= 0 ? r[i] : undefined);
     for (const r of rows.slice(1)) add(r[iu], at(r, ifo), at(r, iv), at(r, id), at(r, ic));
   }

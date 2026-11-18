@@ -1,55 +1,29 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Search, Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { useStore } from '../store';
 import { Wordmark } from './ui';
 import { useLiquidIndicator } from './liquid';
-import { CommandPalette } from './CommandPalette';
 import { fmtCompact } from '../lib/format';
 
-type CountKey = 'nfb' | 'mutual' | 'excluded' | 'review' | 'fans';
+type CountKey = 'nfb' | 'fans' | 'mutual';
 export interface NavItem { to: string; label: string; count?: CountKey; geo?: boolean }
 export interface NavGroup { id: 'analytics' | 'universe' | 'archive'; label: string; title: string; items: NavItem[] }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    id: 'analytics', label: 'Analytics', title: 'The Analytics',
+    id: 'analytics', label: 'Lists', title: 'Your lists',
     items: [
       { to: '/dashboard', label: 'Overview' },
-      { to: '/not-following-back', label: 'Not following back', count: 'nfb' },
+      { to: '/not-following-back', label: 'Don’t follow you back', count: 'nfb' },
+      { to: '/you-dont-follow-back', label: 'You don’t follow back', count: 'fans' },
       { to: '/mutual', label: 'Mutual', count: 'mutual' },
-      { to: '/followers-only', label: 'You don’t follow', count: 'fans' },
-      { to: '/excluded', label: 'Excluded', count: 'excluded' },
-      { to: '/review', label: 'Needs review', count: 'review' },
-      { to: '/activity', label: 'Activity' },
-      { to: '/analytics', label: 'Analytics' },
-    ],
-  },
-  {
-    id: 'universe', label: 'Universe', title: 'The Universe',
-    items: [
-      { to: '/universe', label: 'Social Universe' },
-      { to: '/web', label: 'Connection Web' },
-      { to: '/constellations', label: 'Constellations' },
-      { to: '/world', label: 'World Map', geo: true },
-    ],
-  },
-  {
-    id: 'archive', label: 'Archive', title: 'The Archive',
-    items: [
-      { to: '/replay', label: 'Social Replay' },
-      { to: '/wrapped', label: 'Wrapped' },
-      { to: '/dna', label: 'Social DNA' },
-      { to: '/vault', label: 'Memory Vault' },
-      { to: '/fingerprint', label: 'Fingerprint' },
-      { to: '/museum', label: 'Museum' },
-      { to: '/watchlist', label: 'Watchlist' },
     ],
   },
 ];
 
 /** Pages that belong to a group without being a tab of it. */
-const EXTRA: Record<string, NavGroup['id']> = { '/accounts': 'analytics', '/audit': 'analytics' };
+const EXTRA: Record<string, NavGroup['id']> = { '/following': 'analytics', '/followers': 'analytics' };
 
 export function groupOf(pathname: string): NavGroup | undefined {
   const id = EXTRA[pathname];
@@ -64,11 +38,9 @@ function useCounts(): Partial<Record<CountKey, number>> {
   const { analysis } = useStore();
   if (!analysis) return {};
   return {
-    nfb: analysis.notFollowingBack.length,
-    mutual: analysis.mutual.length,
-    excluded: analysis.excluded.length,
-    review: analysis.needsReview.length,
+    nfb: analysis.followingCount - analysis.mutual.length,
     fans: analysis.fans.length,
+    mutual: analysis.mutual.length,
   };
 }
 
@@ -77,7 +49,6 @@ export function Header() {
   const { analysis, settings } = useStore();
   const [dark, setDark] = useState(false);
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState(false);
   const counts = useCounts();
   const group = analysis ? groupOf(pathname) : undefined;
   const items = (group?.items ?? []).filter((n) => !n.geo || settings.geoEnabled);
@@ -105,17 +76,8 @@ export function Header() {
     };
   }, [pathname]);
 
-  useEffect(() => { setOpen(false); setSearch(false); }, [pathname]);
+  useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => { document.body.style.overflow = open ? 'hidden' : ''; }, [open]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearch((s) => !s); }
-    };
-    const onOpen = () => setSearch(true);
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('followly:search', onOpen);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('followly:search', onOpen); };
-  }, []);
 
   const glass = open ? '' : dark ? 'glass-dark text-paper' : 'glass text-ink';
 
@@ -127,9 +89,7 @@ export function Header() {
             <Wordmark inverse={open || dark} />
           </Link>
 
-          {analysis ? (
-            <GroupSwitcher active={group?.id} dark={dark} />
-          ) : (
+          {!analysis && (
             <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
               <a href="/#how" className="label link-underline text-[0.6875rem]">How it works</a>
               <a href="/#features" className="label link-underline text-[0.6875rem]">Features</a>
@@ -138,16 +98,6 @@ export function Header() {
           )}
 
           <div className="flex shrink-0 items-center gap-1">
-            {analysis && (
-              <button
-                onClick={() => setSearch(true)}
-                className={`flex h-10 items-center gap-2 rounded-full px-3 transition-[background-color,transform] duration-300 [transition-timing-function:var(--ease-spring)] active:scale-90 ${dark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
-                aria-label="Smart search"
-              >
-                <Search size={17} strokeWidth={1.5} />
-                <kbd className="hidden font-sans text-[0.625rem] opacity-50 lg:inline">⌘K</kbd>
-              </button>
-            )}
             {analysis && (
               <Link to="/settings" aria-label="Settings" className={`hidden h-10 w-10 items-center justify-center rounded-full transition-[background-color,transform] duration-300 [transition-timing-function:var(--ease-spring)] active:scale-90 md:flex ${dark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
                 <SettingsIcon size={17} strokeWidth={1.5} />
@@ -176,35 +126,10 @@ export function Header() {
       </header>
 
       <MobileMenu open={open} counts={counts} hasData={!!analysis} />
-      <CommandPalette open={search} onClose={() => setSearch(false)} />
     </>
   );
 }
 
-/** Analytics · Universe · Archive, with a liquid droplet under the active world. */
-function GroupSwitcher({ active, dark }: { active?: NavGroup['id']; dark: boolean }) {
-  const root = useRef<HTMLDivElement>(null);
-  const pill = useRef<HTMLSpanElement>(null);
-  useLiquidIndicator(root, pill, '[data-active="true"]', [active]);
-  return (
-    <nav ref={root} aria-label="Sections" className={`relative hidden rounded-full p-1 md:flex ${dark ? 'bg-white/10' : 'bg-black/[0.05]'}`}>
-      <span ref={pill} aria-hidden="true" className={`pointer-events-none absolute bottom-1 left-0 top-1 rounded-full ${dark ? 'bg-paper' : 'bg-ink'} shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_6px_14px_-6px_rgba(0,0,0,0.5)]`} style={{ width: 0, opacity: 0 }} />
-      {NAV_GROUPS.map((g) => {
-        const on = g.id === active;
-        return (
-          <Link
-            key={g.id}
-            to={g.items[0].to}
-            data-active={on}
-            className={`label relative z-10 flex h-8 items-center rounded-full px-4 text-[0.625rem] transition-colors duration-300 ${on ? (dark ? 'text-ink' : 'text-paper') : 'opacity-70 hover:opacity-100'}`}
-          >
-            {g.label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
 
 /** The current world's pages on a floating glass capsule with a liquid droplet. */
 function SubNav({ group, items, counts, pathname, dark }: { group: NavGroup; items: NavItem[]; counts: Partial<Record<CountKey, number>>; pathname: string; dark: boolean }) {
@@ -213,7 +138,7 @@ function SubNav({ group, items, counts, pathname, dark }: { group: NavGroup; ite
   const pill = useRef<HTMLSpanElement>(null);
   const first = useRef(true);
 
-  useLiquidIndicator(list, pill, 'a[aria-current="page"]', [pathname, items.length, counts.nfb, counts.mutual, counts.excluded, counts.review, counts.fans]);
+  useLiquidIndicator(list, pill, 'a[aria-current="page"]', [pathname, items.length, counts.nfb, counts.fans, counts.mutual]);
 
   useLayoutEffect(() => {
     const ul = list.current, sc = scroller.current;
@@ -227,7 +152,6 @@ function SubNav({ group, items, counts, pathname, dark }: { group: NavGroup; ite
   return (
     <nav aria-label="Pages" className="pointer-events-auto mx-auto mt-2 max-w-[1240px]">
       <div className={`${dark ? 'glass-dark text-paper' : 'glass'} flex items-center gap-1 rounded-full p-1 transition-colors duration-500`}>
-        <GroupPicker group={group} dark={dark} />
         <div ref={scroller} className="min-w-0 flex-1 overflow-x-auto rounded-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <ul ref={list} className="relative flex h-9 w-max min-w-full items-stretch gap-1 whitespace-nowrap">
             <span
@@ -258,55 +182,6 @@ function SubNav({ group, items, counts, pathname, dark }: { group: NavGroup; ite
   );
 }
 
-/** Phones: pick Analytics / Universe / Archive from the start of the tab bar. */
-function GroupPicker({ group, dark }: { group: NavGroup; dark: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { pathname } = useLocation();
-  useEffect(() => setOpen(false), [pathname]);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [open]);
-  return (
-    <div ref={ref} className="relative shrink-0 md:hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className={`label flex h-9 items-center gap-1.5 rounded-full px-3 text-[0.625rem] transition-[background-color,transform] duration-300 [transition-timing-function:var(--ease-spring)] active:scale-95 ${dark ? 'bg-white/10' : 'bg-black/[0.06]'}`}
-      >
-        {group.label}
-        <svg width="8" height="5" viewBox="0 0 10 6" fill="none" aria-hidden="true" className={`transition-transform duration-300 ${open ? 'rotate-180' : ''}`}><path stroke="currentColor" strokeWidth="1.4" d="m1 1 4 4 4-4" /></svg>
-      </button>
-      <div
-        role="menu"
-        className={`${dark ? 'glass-dark text-paper' : 'glass'} glass-thick absolute left-0 top-full z-10 mt-2 w-48 origin-top-left rounded-[20px] p-1.5`}
-        style={{
-          opacity: open ? 1 : 0,
-          transform: open ? 'none' : 'scale(0.7)',
-          pointerEvents: open ? 'auto' : 'none',
-          transition: `opacity ${open ? 140 : 200}ms var(--ease-out), transform ${open ? 560 : 260}ms ${open ? 'var(--ease-spring)' : 'var(--ease-sheet)'}`,
-        }}
-      >
-        {NAV_GROUPS.map((g) => (
-          <Link
-            key={g.id}
-            role="menuitem"
-            tabIndex={open ? 0 : -1}
-            to={g.items[0].to}
-            className={`label flex items-center justify-between rounded-[14px] px-3.5 py-3 text-[0.6875rem] ${g.id === group.id ? (dark ? 'bg-white/10' : 'bg-black/[0.06]') : ''}`}
-          >
-            {g.label}
-            <span className="font-sans text-[0.625rem] normal-case tracking-normal opacity-50">{g.items.length}</span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function MobileMenu({ open, counts, hasData }: { open: boolean; counts: Partial<Record<CountKey, number>>; hasData: boolean }) {
   const { settings } = useStore();

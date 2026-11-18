@@ -122,64 +122,6 @@ export function KineticHeadline({ lines, className = '' }: { lines: string[]; cl
   );
 }
 
-/* ═══════════════════════════ Scroll marquee ═══════════════════════════
- * A giant band of words that drifts sideways and speeds up with your scroll —
- * changing direction when you change direction. */
-export function Marquee({ words }: { words: string[] }) {
-  const track = useRef<HTMLDivElement>(null);
-  const host = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = track.current, wrap = host.current;
-    if (!el || !wrap || reducedMotion()) return;
-    let x = 0, dir = -1, boost = 0, lastY = window.scrollY, raf = 0, last = performance.now(), on = false;
-    const io = new IntersectionObserver(([e]) => {
-      on = e.isIntersecting;
-      if (on && !raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
-    });
-    io.observe(wrap);
-    const onScroll = () => {
-      const dy = window.scrollY - lastY;
-      lastY = window.scrollY;
-      if (dy) dir = dy > 0 ? -1 : 1;
-      boost = Math.min(1600, boost + Math.abs(dy) * 6);
-    };
-    function tick(now: number) {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      boost *= Math.pow(0.04, dt);
-      x += dir * (60 + boost) * dt;
-      const half = el!.scrollWidth / 2;
-      if (x <= -half) x += half;
-      if (x > 0) x -= half;
-      el!.style.transform = `translate3d(${x}px, 0, 0)`;
-      raf = on ? requestAnimationFrame(tick) : 0;
-    }
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => { io.disconnect(); cancelAnimationFrame(raf); window.removeEventListener('scroll', onScroll); };
-  }, []);
-  const row = (k: string) => (
-    <div key={k} className="flex shrink-0 items-center" aria-hidden={k === 'b'}>
-      {words.map((w, i) => (
-        <span key={i} className="flex items-center">
-          <span className={i % 2 ? 'text-transparent [-webkit-text-stroke:1.5px_#000]' : 'text-ink'}>{w}</span>
-          <svg viewBox="0 0 31 20" className="mx-[0.35em] h-[0.42em] w-auto shrink-0" aria-hidden="true">
-            <circle cx="10" cy="10" r="8.6" fill="#000" />
-            <circle cx="21" cy="10" r="8.6" fill="none" stroke="#000" strokeWidth="1.4" />
-          </svg>
-        </span>
-      ))}
-    </div>
-  );
-  return (
-    <div ref={host} className="overflow-hidden border-y border-ink py-6 sm:py-10">
-      <div ref={track} className="display flex w-max whitespace-nowrap text-[18vw] leading-none sm:text-[11vw]" style={{ willChange: 'transform' }}>
-        {row('a')}
-        {row('b')}
-      </div>
-    </div>
-  );
-}
-
 /* ═══════════════════════════ Page transitions ═══════════════════════════
  * Internal link clicks open the next page as a circle growing from the click,
  * using the View Transitions API. Falls back to a normal navigation. */
@@ -211,7 +153,10 @@ export function usePageTransitions() {
       const vt = doc.startViewTransition!(() => {
         flushSync(() => navigate(url.pathname + url.search + url.hash));
         if (!url.hash) window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-      }) as { finished?: Promise<void> } | undefined;
+      }) as { finished?: Promise<void>; ready?: Promise<void>; updateCallbackDone?: Promise<void> } | undefined;
+      // A newer click can skip this transition; that's expected, not an error.
+      vt?.ready?.catch(() => undefined);
+      vt?.updateCallbackDone?.catch(() => undefined);
       const clear = () => header?.style.removeProperty('view-transition-name');
       if (vt?.finished) vt.finished.then(clear, clear); else clear();
     };

@@ -1,12 +1,10 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Copy, Download, PenLine, Search, Star, X } from 'lucide-react';
+import { Check, Copy, Download, Search, X } from 'lucide-react';
 import type { Account, Category } from '../lib/types';
 import { useStore, type ManualVerdict } from '../store';
 import { Avatar, Select, VerifiedBadge, useCoarsePointer } from './ui';
 import { HEADER_APP } from './Header';
-import { burstFrom } from '../lib/burst';
-import { MetaEditor } from './MetaEditor';
 import { copyUsernames, exportAccountsCsv, exportAccountsPdf, reasonLabel } from '../lib/export';
 import { fmtCompact, fmtNumber, fmtUnixDate } from '../lib/format';
 
@@ -31,14 +29,6 @@ const RANGE_TESTS: Record<Range, (n: number | undefined) => boolean> = {
   gt100k: (n) => n !== undefined && n > 100_000,
   unknown: (n) => n === undefined,
 };
-const RANGES: readonly { value: Range; label: string }[] = [
-  { value: 'any', label: 'Any size' },
-  { value: 'lt1k', label: 'Under 1K' },
-  { value: '1k-10k', label: '1K – 10K' },
-  { value: '10k-100k', label: '10K – 100K' },
-  { value: 'gt100k', label: 'Over 100K' },
-  { value: 'unknown', label: 'Count unknown' },
-];
 
 export const CATEGORY_LABEL: Record<Category, string> = {
   'not-following-back': 'Not following back',
@@ -76,11 +66,10 @@ export function AccountExplorer({
   const coarse = useCoarsePointer();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('az');
-  const [range, setRange] = useState<Range>('any');
+  const range: Range = 'any';
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [visible, setVisible] = useState(PAGE);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<Account | null>(null);
   const [copied, setCopied] = useState(false);
   const [intro, setIntro] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -152,11 +141,9 @@ export function AccountExplorer({
   const context = analysis?.snapshot.owner ? `@${analysis.snapshot.owner}` : 'Your Instagram export';
   const filteredBy = Boolean(q) || range !== 'any' || (categoryFilter && category !== 'all');
 
-  const onCopy = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    const btn = e.currentTarget;
+  const onCopy = async () => {
     const ok = await copyUsernames(filtered);
     if (ok) {
-      burstFrom(btn, { count: 16, power: 0.45 });
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
       toast(`Copied ${fmtNumber(filtered.length)} ${filtered.length === 1 ? 'username' : 'usernames'}`);
@@ -206,7 +193,6 @@ export function AccountExplorer({
               <div className="relative flex flex-wrap items-center gap-1.5 px-0.5 lg:px-0">
                 {categoryFilter && <Select label="Category" value={category} onChange={setCategory} options={CATEGORIES} />}
                 <Select label="Sort" value={sort} onChange={setSort} options={SORTS} />
-                <Select label="Follower count" value={range} onChange={setRange} options={RANGES} />
                 <div className="ml-auto flex items-center gap-1">
                   <button
                     className="label flex h-9 items-center gap-2 rounded-full px-3 text-[0.625rem] transition-[background-color,transform] duration-300 [transition-timing-function:var(--ease-spring)] hover:bg-black/5 active:scale-90 disabled:opacity-30"
@@ -267,7 +253,7 @@ export function AccountExplorer({
               dateLabel={dateLabel}
               selected={selected.has(a.username)}
               onToggle={() => setSelected((s) => { const n = new Set(s); if (n.has(a.username)) n.delete(a.username); else n.add(a.username); return n; })}
-              onEdit={() => setEditing(a)}
+              onEdit={() => undefined}
               onVerdict={(v) => { setVerdict([a.username], v); toast(`@${a.username} → ${v === 'regular' ? 'Not following back' : 'Excluded'}`); }}
             />
           ))}
@@ -292,7 +278,7 @@ export function AccountExplorer({
         >
           <div className="glass-dark flex w-full max-w-2xl items-center gap-1 rounded-full py-1.5 pl-5 pr-1.5 text-paper sm:gap-2">
             <span className="label mr-auto pl-1 text-[0.625rem] tabular-nums">{fmtNumber(selected.size)} selected</span>
-            {([['regular', 'Regular'], ['verified', 'Verified'], ['over-threshold', '100K+']] as const).map(([v, l]) => (
+            {([['regular', 'Regular'], ['verified', 'Verified'], ['over-threshold', '50K+']] as const).map(([v, l]) => (
               <button key={v} tabIndex={selected.size ? 0 : -1} className="label h-10 rounded-full px-3 text-[0.625rem] transition-[background-color,transform] duration-300 [transition-timing-function:var(--ease-spring)] hover:bg-white/10 active:scale-90 sm:px-4" onClick={() => bulk(v)}>{l}</button>
             ))}
             <button tabIndex={selected.size ? 0 : -1} className="icon-btn text-paper hover:bg-paper/10" onClick={() => setSelected(new Set())} aria-label="Clear selection"><X size={16} /></button>
@@ -301,7 +287,6 @@ export function AccountExplorer({
         document.body,
       )}
 
-      <MetaEditor account={editing} onClose={() => setEditing(null)} />
     </section>
   );
 }
@@ -378,18 +363,16 @@ function AccountRow({ a, animateDelay, reviewMode, showReason, showCategory, dat
 }) {
   const m = a.meta;
   const date = a.followedAt ?? a.followerSince;
-  const followers = m?.followerCount !== undefined ? fmtCompact(m.followerCount) : m?.confirmedOverThreshold ? '100K+' : null;
+  const followers = m?.followerCount !== undefined ? fmtCompact(m.followerCount) : m?.confirmedOverThreshold ? '50K+' : null;
   const note = showCategory
     ? [CATEGORY_LABEL[a.category], a.reasons.length ? reasonLabel(a) : ''].filter(Boolean).join(' · ')
     : showReason && a.reasons.length
       ? reasonLabel(a)
-      : a.category === 'needs-review'
-        ? 'Unconfirmed'
-        : '';
+      : '';
   const subline = [m?.displayName, note].filter(Boolean).join(' · ');
   return (
     <li
-      className={`group relative isolate grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-line py-3.5 sm:grid-cols-[auto_minmax(0,2.2fr)_1fr_1fr_auto] sm:gap-6 sm:py-4
+      className={`group relative isolate grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-line py-3.5 sm:grid-cols-[auto_minmax(0,2.2fr)_1fr_auto] sm:gap-6 sm:py-4
         before:absolute before:inset-y-1 before:-inset-x-3 before:-z-10 before:rounded-[18px] before:bg-mist before:opacity-0 before:transition-[opacity,transform] before:duration-300
         hover:before:opacity-100 active:before:scale-[0.98] active:before:bg-line has-[a:focus-visible]:before:opacity-100 has-[a:focus-visible]:before:ring-1 has-[a:focus-visible]:before:ring-ink ${animateDelay !== null ? 'row-in' : ''}`}
       style={animateDelay !== null ? { animationDelay: `${animateDelay}ms` } : undefined}
@@ -419,43 +402,19 @@ function AccountRow({ a, animateDelay, reviewMode, showReason, showCategory, dat
         </span>
       </a>
       <div className="hidden text-sm sm:block">
-        <span className="eyebrow block text-[0.625rem] text-muted">Followers</span>
-        <span className="font-light tabular-nums">{followers ?? '—'}</span>
-      </div>
-      <div className="hidden text-sm sm:block">
         <span className="eyebrow block text-[0.625rem] text-muted">{dateLabel}</span>
         <span className="font-light tabular-nums">{fmtUnixDate(date)}</span>
       </div>
       <div className="relative z-10 flex items-center gap-1">
         {reviewMode && (
           <div className="mr-3 hidden items-center gap-5 lg:flex">
-            {([['regular', 'Regular'], ['verified', 'Verified'], ['over-threshold', '100K+']] as const).map(([v, l]) => (
+            {([['regular', 'Regular'], ['verified', 'Verified'], ['over-threshold', '50K+']] as const).map(([v, l]) => (
               <button key={v} className="label text-[0.625rem] text-muted transition-colors hover:text-ink" onClick={() => onVerdict(v)}>{l}</button>
             ))}
           </div>
         )}
-        <WatchStar username={a.username} />
-        <button className="icon-btn text-muted hover:text-ink" onClick={onEdit} aria-label={`Edit details for ${a.username}`} title="Account details">
-          <PenLine size={16} strokeWidth={1.5} />
-        </button>
       </div>
     </li>
   );
 }
 
-/** Star an account to track it in the Watchlist. Pops when toggled. */
-function WatchStar({ username }: { username: string }) {
-  const { watchlist, toggleWatch } = useStore();
-  const on = watchlist.includes(username);
-  return (
-    <button
-      className={`icon-btn transition-colors ${on ? 'text-ink' : 'text-muted opacity-0 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'}`}
-      onClick={() => toggleWatch(username)}
-      aria-pressed={on}
-      aria-label={on ? `Remove ${username} from watchlist` : `Add ${username} to watchlist`}
-      title="Watchlist"
-    >
-      <Star key={String(on)} size={16} strokeWidth={1.5} fill={on ? '#000' : 'none'} style={{ animation: on ? 'marker-pop 500ms cubic-bezier(0.3,1.5,0.5,1)' : undefined }} />
-    </button>
-  );
-}

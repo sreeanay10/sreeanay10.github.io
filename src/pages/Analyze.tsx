@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Check, FileArchive, FileJson, Lock, X } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, Check, FileArchive, FileJson, Lock, X } from 'lucide-react';
 import { Container, Segmented, useCoarsePointer } from '../components/ui';
 import { Odometer, Roll } from '../components/motion';
-import { burst } from '../lib/burst';
 import { HealthReport } from '../components/Health';
-import { GUIDE_STEPS } from './Home';
 import { useStore } from '../store';
 import { ImportError, parseFiles, parseZip, type ProgressUpdate } from '../lib/parse';
 import type { ParseResult } from '../lib/types';
 import { fmtNumber } from '../lib/format';
 
 type Mode = 'zip' | 'files';
+
+const ACCOUNTS_CENTER = 'https://accountscenter.facebook.com/info_and_permissions';
+const DOWNLOAD_STEPS = [
+  'Open Instagram',
+  'Go to Settings and activity',
+  'Open Accounts Center',
+  'Select Your information and permissions',
+  'Select Download your information',
+  'Choose your Instagram account',
+  'Select Some of your information',
+  'Select Followers and following',
+  'Choose All time',
+  'Select JSON as the format',
+  'Export to device and download the ZIP',
+];
 type Phase =
   | { k: 'idle' }
   | { k: 'working'; p: ProgressUpdate }
@@ -26,15 +39,17 @@ const STAGES: { id: ProgressUpdate['stage']; label: string }[] = [
 ];
 
 export default function Analyze() {
-  const { addSnapshot, settings } = useStore();
+  const { addSnapshot } = useStore();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('zip');
   const [phase, setPhase] = useState<Phase>({ k: 'idle' });
   const [followersFiles, setFollowersFiles] = useState<File[]>([]);
   const [followingFiles, setFollowingFiles] = useState<File[]>([]);
   const coarse = useCoarsePointer();
+  const [fileName, setFileName] = useState('');
 
   const finish = useCallback(async (run: () => Promise<ParseResult>, source: 'zip' | 'files', name: string) => {
+    setFileName(name);
     setPhase({ k: 'working', p: { stage: 'reading', progress: 0.02 } });
     try {
       const r = await run();
@@ -59,6 +74,10 @@ export default function Analyze() {
   const handleAny = (files: File[]) => {
     const zip = files.find((f) => /\.zip$/i.test(f.name));
     if (zip) return handleZip(zip);
+    if (!files.some((f) => /\.(json|html?)$/i.test(f.name))) {
+      setFileName(files[0]?.name ?? '');
+      return setPhase({ k: 'error', message: 'That isn’t an Instagram ZIP. Upload the .zip file Instagram sent you — no need to unzip it.' });
+    }
     const fol = files.filter((f) => /follower/i.test(f.name));
     const ing = files.filter((f) => /following/i.test(f.name));
     const other = files.filter((f) => !fol.includes(f) && !ing.includes(f));
@@ -71,11 +90,6 @@ export default function Analyze() {
     finish(() => parseFiles(followersFiles, followingFiles, onProgress), 'files', [...followersFiles, ...followingFiles].map((f) => f.name).join(', '));
 
   const doneRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (phase.k !== 'done') return;
-    const r = doneRef.current?.getBoundingClientRect();
-    if (r) burst(r.left + r.width / 2, r.top + 40, { count: 64, power: 1.1 });
-  }, [phase.k]);
 
   useEffect(() => {
     if (phase.k !== 'done' || phase.r.health.checks.some((c) => c.level === 'warn' || c.level === 'error')) return;
@@ -123,13 +137,12 @@ export default function Analyze() {
                 </div>
               )}
               <p className="mt-6 flex items-center gap-2 text-xs font-light text-muted">
-                <Lock size={12} strokeWidth={1.5} /> Stays on your device.
-                {!settings.historyEnabled && ' History is off.'}
+                <Lock size={12} strokeWidth={1.5} /> Read in your browser. Never uploaded. No password.
               </p>
             </>
           )}
 
-          {phase.k === 'working' && <Progress p={phase.p} />}
+          {phase.k === 'working' && <Progress p={phase.p} name={fileName} />}
 
           {phase.k === 'done' && (
             <div ref={doneRef} className="page-enter mt-12 rounded-[32px] bg-mist p-8 sm:p-10" aria-live="polite">
@@ -155,6 +168,7 @@ export default function Analyze() {
           {phase.k === 'error' && (
             <div className="page-enter mt-12 rounded-[32px] bg-mist p-8 sm:p-10" role="alert">
               <p className="eyebrow flex items-center gap-2"><AlertCircle size={14} /> Couldn't read that</p>
+              {fileName && <p className="mt-4 flex items-center gap-2 truncate text-sm text-muted"><FileArchive size={16} strokeWidth={1.25} /> {fileName}</p>}
               <p className="lede mt-5 max-w-lg text-lg text-graphite">{phase.message}</p>
               <button className="btn btn-primary mt-8" onClick={() => setPhase({ k: 'idle' })}><Roll>Try again</Roll></button>
             </div>
@@ -162,22 +176,19 @@ export default function Analyze() {
         </div>
 
         <aside className="lg:col-span-5 lg:pl-8">
-          <p className="eyebrow mb-4 text-muted">Get your export</p>
-          <ol className="space-y-2">
-            {GUIDE_STEPS.map(([t, b], i) => (
-              <li
-                key={t}
-                className="flex items-center gap-4 rounded-[20px] bg-mist px-5 py-4 transition-transform duration-500 [transition-timing-function:var(--ease-spring)] hover:translate-x-1"
-                style={{ animation: `rise 600ms var(--ease-sheet) ${200 + i * 60}ms backwards` }}
-              >
-                <span className="numeral w-6 text-xl text-muted">{i + 1}</span>
-                <div>
-                  <p className="text-[0.9375rem] font-medium">{t}</p>
-                  <p className="text-[0.8125rem] font-light text-muted">{b}</p>
-                </div>
+          <p className="eyebrow mb-4 text-muted">Get your Instagram ZIP</p>
+          <ol className="divide-y divide-line border-y border-line">
+            {DOWNLOAD_STEPS.map((t, i) => (
+              <li key={t} className="flex items-baseline gap-4 py-3" style={{ animation: `rise 600ms var(--ease-sheet) ${150 + i * 35}ms backwards` }}>
+                <span className="numeral w-6 shrink-0 text-base text-muted tabular-nums">{i + 1}</span>
+                <span className="text-[0.9375rem]">{t}</span>
               </li>
             ))}
           </ol>
+          <a href={ACCOUNTS_CENTER} target="_blank" rel="noopener noreferrer" className="btn btn-outline mt-6 w-full sm:w-auto">
+            <Roll>Open Accounts Center</Roll> <ArrowUpRight size={14} strokeWidth={1.5} />
+          </a>
+          <p className="mt-4 text-xs font-light text-muted">Instagram emails you when the ZIP is ready.</p>
         </aside>
       </div>
     </Container>
@@ -268,7 +279,7 @@ function FileSlot({ label, hint, files, setFiles }: { label: string; hint: strin
   );
 }
 
-function Progress({ p }: { p: ProgressUpdate }) {
+function Progress({ p, name }: { p: ProgressUpdate; name: string }) {
   // Stage-based: we show which step is running, never a made-up percentage.
   const stage = p.stage === 'locating' ? 'parsing' : p.stage;
   const current = Math.max(0, STAGES.findIndex((s) => s.id === stage));
@@ -278,6 +289,7 @@ function Progress({ p }: { p: ProgressUpdate }) {
   const rx = 400 + (1 - join) * 230;
   return (
     <div className="page-enter mt-10 rounded-[32px] bg-mist p-8 sm:p-10" aria-live="polite" aria-busy="true">
+      {name && <p className="mb-6 flex items-center gap-2 truncate text-sm"><FileArchive size={16} strokeWidth={1.25} className="shrink-0" /> <span className="truncate">{name}</span></p>}
       <div className="mx-auto aspect-[640/400] w-full max-w-[300px]">
         <svg viewBox="0 30 640 380" className="h-full w-full overflow-visible" aria-hidden="true">
           <defs><clipPath id="prog-l"><circle cx="240" cy="210" r="150" /></clipPath></defs>

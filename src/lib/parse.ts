@@ -180,27 +180,6 @@ function dateFromFileName(name: string): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function findOwner(text: string): string | null {
-  try {
-    const data = JSON.parse(text);
-    let found: string | null = null;
-    const walk = (n: unknown, d: number) => {
-      if (found || d > 8 || !n || typeof n !== 'object') return;
-      const o = n as Record<string, unknown>;
-      const user = o.Username as { value?: string } | undefined;
-      if (user && typeof user === 'object' && typeof user.value === 'string') {
-        found = normalizeUsername(user.value);
-        return;
-      }
-      for (const v of Object.values(o)) walk(v, d + 1);
-    };
-    walk(data, 0);
-    return found;
-  } catch {
-    return null;
-  }
-}
-
 function finalize(
   followers: Entry[],
   following: Entry[],
@@ -232,18 +211,20 @@ type ZipLike = import('jszip');
 async function locateInZip(zip: ZipLike, depth = 0): Promise<{
   zip: ZipLike;
   hits: { path: string; kind: Kind; format: Format; date: Date }[];
-  ownerPath: string | null;
 }> {
   const hits: { path: string; kind: Kind; format: Format; date: Date }[] = [];
   const nested: string[] = [];
-  let ownerPath: string | null = null;
   zip.forEach((path, entry) => {
     if (entry.dir) return;
     const id = identifyExportPath(path);
     if (id) hits.push({ path, ...id, date: entry.date });
-    else if (/personal_information\.json$/i.test(path) && !path.includes('__MACOSX')) ownerPath = path;
     else if (/\.zip$/i.test(path) && !path.includes('__MACOSX')) nested.push(path);
   });
+  // Instagram keeps the real lists in connections/followers_and_following/. Other folders
+  // (e.g. Threads) reuse the same file names, so when that folder exists, use only it.
+  const official = hits.filter((h) => /(^|\/)followers_and_following\//i.test(h.path));
+  if (official.length) hits.splice(0, hits.length, ...official);
+  else hits.splice(0, hits.length, ...hits.filter((h) => !/(^|\/)threads\//i.test(h.path)));
   if (hits.length === 0 && nested.length > 0 && depth === 0) {
     const JSZip = (await import('jszip')).default;
     for (const p of nested) {
@@ -252,7 +233,7 @@ async function locateInZip(zip: ZipLike, depth = 0): Promise<{
       if (res.hits.length) return res;
     }
   }
-  return { zip, hits, ownerPath };
+  return { zip, hits };
 }
 
 export async function parseZip(file: File, onProgress?: OnProgress): Promise<ParseResult> {
@@ -265,7 +246,7 @@ export async function parseZip(file: File, onProgress?: OnProgress): Promise<Par
     throw new ImportError("This file couldn't be opened as a ZIP archive. Make sure it's the export Instagram sent you, fully downloaded.");
   }
   onProgress?.({ stage: 'locating', progress: 0.25, detail: 'Finding followers and following' });
-  const { zip, hits, ownerPath } = await locateInZip(root);
+  const { zip, hits } = await locateInZip(root);
 
   const warnings: string[] = [];
   const pick = (kind: Kind) => {
@@ -308,8 +289,8 @@ export async function parseZip(file: File, onProgress?: OnProgress): Promise<Par
     reports.push(report);
   }
 
-  let owner: string | null = null;
-  if (ownerPath) owner = findOwner(await zip.file(ownerPath)!.async('string'));
+  // Only followers and following are read — nothing else in the archive is opened.
+  const owner: string | null = null;
 
   const zipDates = targets.map((t) => t.date?.getTime()).filter((d): d is number => !!d && d > 1262304000000 && d < Date.now() + 864e5);
   const exportDate = dateFromFileName(file.name) ?? (zipDates.length ? Math.max(...zipDates) : null);

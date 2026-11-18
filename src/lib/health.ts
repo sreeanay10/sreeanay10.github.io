@@ -68,6 +68,9 @@ export function buildHealth(input: {
     ? { id: 'complete', level: 'warn', title: 'Data looks incomplete', detail: `${followers.length} followers · ${following.length} following` }
     : { id: 'complete', level: 'ok', title: `${followers.length.toLocaleString('en-US')} followers · ${following.length.toLocaleString('en-US')} following` });
 
+  const cut = followersCutoff(followers, following);
+  if (cut) checks.push({ id: 'partial', level: 'warn', title: 'Followers list is partial', detail: `Only followers since ${new Date(cut * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Re-download with Date range: All time.` });
+
   const dupF = Math.max(0, input.followersRaw - followers.length);
   const dupG = Math.max(0, input.followingRaw - following.length);
   checks.push(dupF + dupG
@@ -88,9 +91,6 @@ export function buildHealth(input: {
       : { id: 'same-export', level: 'ok', title: 'Files are from one export' });
   }
 
-  checks.push(input.owner
-    ? { id: 'owner', level: 'ok', title: `Account @${input.owner}` }
-    : { id: 'owner', level: 'info', title: 'Account name not included' });
 
   return { checks, files, duplicates: { followers: dupF, following: dupG }, dated };
 }
@@ -99,4 +99,17 @@ export function healthScore(r: HealthReport): HealthLevel {
   if (r.checks.some((c) => c.level === 'error')) return 'error';
   if (r.checks.some((c) => c.level === 'warn')) return 'warn';
   return 'ok';
+}
+
+/**
+ * Instagram's export uses the "Date range" chosen when downloading. With anything but
+ * "All time", the followers file only holds recent followers, so older mutuals look like
+ * they don't follow back. Returns the oldest follower date when that seems to have happened.
+ */
+export function followersCutoff(followers: Entry[], following: Entry[]): number | null {
+  const oldest = (l: Entry[]) => l.reduce<number | null>((m, e) => (e.t && (m === null || e.t < m) ? e.t : m), null);
+  const f = oldest(followers);
+  const g = oldest(following);
+  if (f === null || g === null) return null;
+  return f - g > (90 * DAY) / 1000 ? f : null;
 }

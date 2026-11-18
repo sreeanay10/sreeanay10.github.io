@@ -2,28 +2,20 @@ import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { Container, useReducedMotion, useReveal, Wordmark } from '../components/ui';
-import { KineticHeadline, Marquee, Roll } from '../components/motion';
+import { KineticHeadline, Roll } from '../components/motion';
 import { useStore } from '../store';
 import { clamp } from '../lib/spring';
 
-export const GUIDE_STEPS = [
-  ['Open Instagram', 'Settings and activity'],
-  ['Accounts Center', 'Top of the list'],
-  ['Your information', 'and permissions'],
-  ['Download your information', 'Choose your account'],
-  ['Followers and following', 'JSON · All time'],
-  ['Drop the ZIP here', 'It arrives by email'],
+const HOW_STEPS = [
+  ['Request your download', 'Accounts Center · Followers and following · JSON · All time'],
+  ['Get the ZIP', 'Instagram emails it to you.'],
+  ['Upload it here', 'Your three lists appear instantly.'],
 ] as const;
 
 const FEATURES: [string, string, string][] = [
-  ['Not following back', 'Exact. Celebrities filtered out.', '/not-following-back'],
-  ['Social Universe', 'Your network in 3D.', '/universe'],
-  ['Social Replay', 'Watch it change over time.', '/replay'],
-  ['Followly Wrapped', 'Your year, in slides.', '/wrapped'],
-  ['Network Fingerprint', 'Art made from your numbers.', '/fingerprint'],
-  ['World Map', 'Where your audience is.', '/world'],
-  ['Memory Vault', 'Every export, kept and named.', '/vault'],
-  ['Smart Search', 'Ask in plain English.', 'search'],
+  ['Don’t follow you back', 'You follow them. They don’t.', '/not-following-back'],
+  ['You don’t follow back', 'They follow you. You don’t.', '/you-dont-follow-back'],
+  ['Mutual', 'You follow each other.', '/mutual'],
 ];
 
 export default function Home() {
@@ -32,46 +24,45 @@ export default function Home() {
   return (
     <div ref={ref}>
       {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="relative flex min-h-[100svh] flex-col justify-end pb-10 pt-28 sm:pb-16">
-        <Container>
-          <p className="eyebrow mb-8 text-muted fade-in" style={{ animationDelay: '200ms' }}>Understand your social world.</p>
-          <KineticHeadline className="display hero-title" lines={['Your following.', 'Your connections.', 'Your control.']} />
-          <div className="mt-12 flex flex-col gap-8 sm:mt-16 md:flex-row md:items-end md:justify-between">
-            <p className="lede max-w-md text-lg text-graphite fade-in sm:text-xl" style={{ animationDelay: '900ms' }}>
-              Discover your Instagram network. Understand your connections. See the bigger picture.
-            </p>
-            <div className="flex flex-wrap items-center gap-3 fade-in" style={{ animationDelay: '1050ms' }}>
-              <Link to={analysis ? '/dashboard' : '/analyze'} className="btn btn-primary h-14 px-9">
-                <Roll>{analysis ? 'Open my dashboard' : 'Analyze my account'}</Roll>
-              </Link>
-              <a href="#features" className="btn btn-outline h-14 px-7"><Roll>Explore Followly</Roll></a>
-            </div>
+      <section className="relative pb-16 pt-32 sm:pb-24 sm:pt-44">
+        <Container className="text-center">
+          <p className="eyebrow mb-6 text-muted fade-in" style={{ animationDelay: '150ms' }}>For Instagram</p>
+          <KineticHeadline className="display hero-title" lines={['See who doesn’t', 'follow you back.']} />
+          <p className="lede mx-auto mt-8 max-w-md text-lg text-graphite fade-in sm:text-xl" style={{ animationDelay: '700ms' }}>
+            Upload your Instagram download. Get three simple lists. No password.
+          </p>
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3 fade-in" style={{ animationDelay: '850ms' }}>
+            <Link to={analysis ? '/dashboard' : '/analyze'} className="btn btn-primary h-14 px-9">
+              <Roll>{analysis ? 'Open my overview' : 'Get started'}</Roll>
+            </Link>
+            <a href="#how" className="btn btn-outline h-14 px-7"><Roll>How it works</Roll></a>
           </div>
         </Container>
+        <Container className="mt-16 sm:mt-24">
+          <ProductShot />
+        </Container>
       </section>
-
-      <Marquee words={['Following', 'Followers', 'Mutual', 'Not following back']} />
 
       {/* ── How it works ───────────────────────────────────── */}
       <section id="how" className="scroll-mt-20 py-24 sm:py-36">
         <Container>
-          <h2 data-reveal className="display text-[2.75rem] sm:text-7xl lg:text-8xl">Six steps.<br />No password.</h2>
-          <ol className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {GUIDE_STEPS.map(([t, b], i) => (
+          <h2 data-reveal className="display text-[2.75rem] sm:text-7xl lg:text-8xl">No password.<br />Just a download.</h2>
+          <ol className="mt-14 grid gap-3 sm:grid-cols-3">
+            {HOW_STEPS.map(([t, b], i) => (
               <li
                 key={t}
                 data-reveal
                 style={{ ['--reveal-delay' as string]: `${i * 60}ms` }}
-                className="group rounded-[28px] bg-mist p-7 transition-[transform,background-color,box-shadow] duration-500 [transition-timing-function:var(--ease-spring)] hover:-translate-y-1.5 hover:bg-paper hover:shadow-[inset_0_0_0_1px_#EAEAEA,0_24px_48px_-24px_rgba(0,0,0,0.25)]"
+                className="rounded-[28px] bg-mist p-7"
               >
-                <span className="numeral block text-5xl text-muted transition-colors duration-300 group-hover:text-ink">{String(i + 1).padStart(2, '0')}</span>
+                <span className="numeral block text-5xl text-muted">{String(i + 1).padStart(2, '0')}</span>
                 <p className="headline mt-10 text-lg">{t}</p>
                 <p className="mt-2 text-sm font-light text-muted">{b}</p>
               </li>
             ))}
           </ol>
-          <div data-reveal className="mt-10">
-            <Link to="/analyze" className="btn btn-primary"><Roll>Upload my export</Roll><ArrowRight size={14} strokeWidth={1.5} /></Link>
+          <div data-reveal className="mt-10 flex flex-wrap gap-3">
+            <Link to="/analyze" className="btn btn-primary"><Roll>See every step</Roll><ArrowRight size={14} strokeWidth={1.5} /></Link>
           </div>
         </Container>
       </section>
@@ -79,8 +70,8 @@ export default function Home() {
       {/* ── Features ───────────────────────────────────────── */}
       <section id="features" className="scroll-mt-20 pb-24 sm:pb-36">
         <Container>
-          <h2 data-reveal className="display text-[2.75rem] sm:text-7xl lg:text-8xl">More than<br />a list.</h2>
-          <ul className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <h2 data-reveal className="display text-[2.75rem] sm:text-7xl lg:text-8xl">Three lists.<br />That’s it.</h2>
+          <ul className="mt-14 grid gap-3 sm:grid-cols-3">
             {FEATURES.map(([t, b, to], i) => {
               const cls = `group flex h-full flex-col justify-between rounded-[28px] p-7 text-left transition-[transform,box-shadow] duration-500 [transition-timing-function:var(--ease-spring)] hover:-translate-y-1.5 hover:shadow-[0_24px_48px_-24px_rgba(0,0,0,0.3)] active:scale-[0.98] ${i === 0 ? 'bg-ink text-paper' : 'bg-mist'}`;
               const body = (
@@ -93,12 +84,8 @@ export default function Home() {
                 </>
               );
               return (
-                <li key={t} data-reveal style={{ ['--reveal-delay' as string]: `${(i % 4) * 60}ms` }}>
-                  {to === 'search' ? (
-                    <button className={`${cls} w-full`} onClick={() => window.dispatchEvent(new Event('followly:search'))}>{body}</button>
-                  ) : (
-                    <Link to={analysis ? to : '/analyze'} className={cls}>{body}</Link>
-                  )}
+                <li key={t} data-reveal style={{ ['--reveal-delay' as string]: `${i * 60}ms` }}>
+                  <Link to={analysis ? to : '/analyze'} className={cls}>{body}</Link>
                 </li>
               );
             })}
@@ -106,19 +93,7 @@ export default function Home() {
         </Container>
       </section>
 
-      {/* ── Social Universe preview ────────────────────────── */}
-      <section data-header-theme="dark" className="relative overflow-hidden bg-ink py-28 text-paper sm:py-40">
-        <UniversePreview />
-        <Container className="relative">
-          <p data-reveal className="eyebrow text-paper/50">Social Universe</p>
-          <h2 data-reveal className="display mt-6 text-[2.75rem] sm:text-7xl lg:text-8xl">Your network,<br />as a universe.</h2>
-          <div data-reveal className="mt-12">
-            <Link to={analysis ? '/universe' : '/analyze'} className="btn btn-inverse h-14 px-8"><Roll>{analysis ? 'Enter your universe' : 'Build yours'}</Roll></Link>
-          </div>
-        </Container>
-      </section>
-
-      {/* ── Analytics preview: the maths, explained ─────────── */}
+      {/* ── The comparison, explained ─────────────────────────── */}
       <PrincipleStory />
 
       {/* ── Privacy ────────────────────────────────────────── */}
@@ -182,7 +157,7 @@ export function Footer() {
 const STEPS = [
   { title: 'Everyone you follow.', body: 'Straight from your export.' },
   { title: 'Everyone who follows you.', body: 'The overlap is mutual.' },
-  { title: 'The rest doesn’t follow back.', body: 'Minus verified and 100K+ accounts.' },
+  { title: 'The rest doesn’t follow back.', body: 'Everyone you follow who doesn’t follow you.' },
 ];
 
 function useScrollProgress(ref: RefObject<HTMLElement>) {
@@ -303,50 +278,47 @@ function PrincipleStory() {
   );
 }
 
-/** Decorative, abstract star field for the homepage — not account data. */
-function UniversePreview() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const reduce = useReducedMotion();
-  useEffect(() => {
-    const c = ref.current;
-    if (!c) return;
-    const ctx = c.getContext('2d')!;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const pts = Array.from({ length: 520 }, (_, i) => {
-      const shell = i % 3;
-      const y = 1 - (2 * (i + 0.5)) / 520;
-      const r = Math.sqrt(1 - y * y);
-      const th = i * 2.399963;
-      const R = [120, 200, 300][shell] * (0.9 + ((i * 7919) % 100) / 500);
-      return { x: Math.cos(th) * r * R, y: y * R * 0.8, z: Math.sin(th) * r * R, s: [1.8, 1.4, 1][shell], a: [1, 0.7, 0.4][shell] };
-    });
-    let raf = 0, angle = 0, visible = true;
-    const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible && !raf) raf = requestAnimationFrame(draw); });
-    io.observe(c);
-    function draw() {
-      raf = 0;
-      const W = (c!.width = c!.clientWidth * dpr), H = (c!.height = c!.clientHeight * dpr);
-      ctx.clearRect(0, 0, W, H);
-      const cx = W * (W > 1100 * dpr ? 0.8 : 0.72), cy = H * 0.5, f = 600 * dpr;
-      const ca = Math.cos(angle), sa = Math.sin(angle);
-      for (const p of pts) {
-        const x = p.x * ca - p.z * sa, z = p.x * sa + p.z * ca + 700;
-        const k = f / z;
-        ctx.globalAlpha = p.a * Math.min(1, 900 / z);
-        ctx.beginPath();
-        ctx.arc(cx + x * k * 0.6, cy + p.y * k * 0.6, p.s * k * 0.6, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff';
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 7 * dpr, 0, Math.PI * 2);
-      ctx.fill();
-      if (!reduce) angle += 0.0025;
-      if (visible && !reduce) raf = requestAnimationFrame(draw);
-    }
-    raf = requestAnimationFrame(draw);
-    return () => { io.disconnect(); cancelAnimationFrame(raf); };
-  }, [reduce]);
-  return <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full opacity-80" aria-hidden="true" />;
+
+/** A picture of the Overview, like a product shot. Example numbers, clearly labelled. */
+function ProductShot() {
+  const totals: [string, string][] = [['Followers', '412'], ['Following', '538']];
+  const lists: [string, string][] = [['Don’t follow you back', '158'], ['You don’t follow back', '32'], ['Mutual', '380']];
+  const rows = ['alex.morgan', 'jamie.lee', 'sam_rivera'];
+  return (
+    <figure data-reveal className="mx-auto max-w-5xl">
+      <div aria-hidden="true" className="overflow-hidden rounded-[32px] bg-paper shadow-[inset_0_0_0_1px_#EAEAEA,0_60px_120px_-60px_rgba(0,0,0,0.45)]">
+        <div className="flex items-center gap-1.5 border-b border-line px-6 py-4">
+          {[0, 1, 2].map((i) => <span key={i} className="h-2.5 w-2.5 rounded-full bg-line" />)}
+        </div>
+        <div className="px-6 pb-8 pt-8 text-left sm:px-12 sm:pb-12 sm:pt-12">
+          <p className="display text-3xl sm:text-5xl">Overview</p>
+          <div className="mt-8 grid grid-cols-2 gap-px border-y border-t-ink border-b-line bg-line">
+            {totals.map(([l, v], i) => (
+              <div key={l} className={`bg-paper py-6 ${i ? 'pl-5 sm:pl-8' : ''}`}>
+                <p className="eyebrow text-[0.625rem] text-muted">{l}</p>
+                <p className="numeral mt-3 text-4xl sm:text-6xl">{v}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-px border-b border-line bg-line">
+            {lists.map(([l, v], i) => (
+              <div key={l} className={`bg-paper py-6 pr-3 ${i ? 'pl-3 sm:pl-8' : ''}`}>
+                <p className="eyebrow text-[0.5625rem] leading-snug text-muted sm:text-[0.625rem]">{l}</p>
+                <p className="numeral mt-3 text-3xl sm:text-5xl">{v}</p>
+              </div>
+            ))}
+          </div>
+          <ul className="mt-6 hidden sm:block">
+            {rows.map((u) => (
+              <li key={u} className="flex items-center gap-4 border-b border-line py-3.5 last:border-0">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-mist text-xs uppercase text-muted">{u[0]}</span>
+                <span className="text-[0.9375rem] font-medium">{u}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <figcaption className="mt-4 text-center text-xs font-light text-muted">Example numbers.</figcaption>
+    </figure>
+  );
 }

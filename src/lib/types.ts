@@ -49,9 +49,9 @@ export interface AccountMeta {
   followerCount?: number;
   verified?: boolean;
   displayName?: string;
-  /** The user personally confirmed this is a regular (non-verified, ≤100K) account. */
+  /** The user personally confirmed this is a regular (non-verified, ≤50K) account. */
   confirmedRegular?: boolean;
-  /** The user personally confirmed this account has more than 100,000 followers (exact count unknown). */
+  /** The user personally confirmed this account has more than 50,000 followers (exact count unknown). */
   confirmedOverThreshold?: boolean;
   /**
    * ISO 3166-1 alpha-2 country, only ever from a location someone shared or the user entered.

@@ -3,8 +3,8 @@ import type {
 } from './types';
 import { profileUrl } from './username';
 
-/** Accounts with MORE than this many followers are excluded. Exactly 100,000 is not. */
-export const FOLLOWER_THRESHOLD = 100_000;
+/** Accounts with MORE than this many followers don't count. Exactly 50,000 does. */
+export const FOLLOWER_THRESHOLD = 50_000;
 
 export type Verdict =
   | { category: 'excluded'; reasons: ExclusionReason[] }
@@ -14,8 +14,8 @@ export type Verdict =
 /**
  * Decide where a non-follow-back account belongs.
  *  • Verified (any size)            → excluded
- *  • More than 100,000 followers    → excluded
- *  • Confirmed not verified AND confirmed ≤100,000, or confirmed regular by the user → not following back
+ *  • More than 50,000 followers     → excluded
+ *  • Confirmed not verified AND confirmed ≤50,000, or confirmed regular by the user → not following back
  *  • Anything unconfirmed           → needs review (never assumed ordinary)
  */
 export function classifyNonFollowBack(meta: AccountMeta | undefined): Verdict {
@@ -91,7 +91,7 @@ export function rawNonFollowBacks(s: Snapshot): Set<string> {
   return new Set(s.following.map((e) => e.u).filter((u) => !f.has(u)));
 }
 
-/** Non-follow-backs that are not excluded as verified / >100K (includes ones still awaiting review). */
+/** Non-follow-backs that are not excluded as verified / >50K (includes ones still awaiting review). */
 export function eligibleNonFollowBacks(s: Snapshot, metadata: MetaMap): Set<string> {
   return new Set([...rawNonFollowBacks(s)].filter((u) => classifyNonFollowBack(metadata[u]).category !== 'excluded'));
 }

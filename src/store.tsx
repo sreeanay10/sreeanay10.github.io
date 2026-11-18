@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AccountMeta, Analysis, Group, MetaMap, ParseResult, Settings, Snapshot, SnapshotDiff } from './lib/types';
-import { analyze, diffSnapshots, sortSnapshots } from './lib/analysis';
+import { analyze, diffSnapshots, FOLLOWER_THRESHOLD, sortSnapshots } from './lib/analysis';
 import { mergeMeta } from './lib/metadata';
 import * as storage from './lib/storage';
 
@@ -131,7 +131,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           confirmedOverThreshold: v === 'over-threshold',
           verified: v === 'verified' ? true : v === 'regular' ? false : base?.verified,
         };
-        if (v === 'regular' && (base?.followerCount ?? 0) > 100_000) delete next[u].followerCount;
+        if (v === 'regular' && (base?.followerCount ?? 0) > FOLLOWER_THRESHOLD) delete next[u].followerCount;
       }
       return next;
     });

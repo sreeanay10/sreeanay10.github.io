@@ -21,19 +21,30 @@ describe('analysis', () => {
     expect(a.followBackRate).toBeCloseTo(60);
   });
 
+  it('splits into the three categories with set logic', () => {
+    // @ and capitals are normalized when parsing; here usernames are already clean.
+    const a = analyze(snap(['mia', 'sam', 'fan1', 'fan2'], ['mia', 'sam', 'ghost']), {});
+    const notBack = [...a.notFollowingBack, ...a.needsReview, ...a.excluded].map((x) => x.username);
+    expect(notBack).toEqual(['ghost']);                                     // following − followers
+    expect(a.fans.map((x) => x.username).sort()).toEqual(['fan1', 'fan2']); // followers − following
+    expect(a.mutual.map((x) => x.username).sort()).toEqual(['mia', 'sam']); // following ∩ followers
+    expect(a.followersCount).toBe(4);
+    expect(a.followingCount).toBe(3);
+  });
+
   it('puts unconfirmed accounts in needs review, never assumes ordinary', () => {
     const a = analyze(snap([], ['alex']), {});
     expect(a.notFollowingBack).toHaveLength(0);
     expect(a.needsReview.map((x) => x.username)).toEqual(['alex']);
   });
 
-  it('applies the follower threshold strictly above 100,000', () => {
+  it('applies the follower threshold strictly above 50,000', () => {
     const m = (followerCount: number) => ({ followerCount, verified: false, source: 't', updatedAt: 0 });
-    expect(classifyNonFollowBack(m(100_001)).category).toBe('excluded');
-    expect(classifyNonFollowBack(m(500_000)).category).toBe('excluded');
+    expect(classifyNonFollowBack(m(50_001)).category).toBe('excluded');
+    expect(classifyNonFollowBack(m(100_000)).category).toBe('excluded');
     expect(classifyNonFollowBack(m(1_000_000)).category).toBe('excluded');
-    expect(classifyNonFollowBack(m(100_000)).category).toBe('not-following-back');
     expect(classifyNonFollowBack(m(50_000)).category).toBe('not-following-back');
+    expect(classifyNonFollowBack(m(10_000)).category).toBe('not-following-back');
   });
 
   it('excludes every verified account regardless of size', () => {
@@ -109,8 +120,35 @@ describe('parsing', () => {
     const res = await parseZip(file);
     expect(res.followers.map((e) => e.u).sort()).toEqual(['a', 'b', 'c']);
     expect(res.following.map((e) => e.u).sort()).toEqual(['a', 'z']);
-    expect(res.owner).toBe('me');
+    expect(res.owner).toBeNull(); // personal_information.json is never opened
     expect(new Date(res.exportDate!).getFullYear()).toBe(2024);
+  });
+
+  it('ignores Threads files that reuse the same names', async () => {
+    const zip = new JSZip();
+    const f = (u: string) => ({ title: '', string_list_data: [{ value: u, href: `https://www.instagram.com/${u}` }] });
+    zip.file('connections/followers_and_following/followers_1.json', JSON.stringify([f('a')]));
+    zip.file('connections/followers_and_following/following.json', JSON.stringify({ relationships_following: [f('a'), f('b')] }));
+    zip.file('your_instagram_activity/threads/followers.json', JSON.stringify([f('threadsfan')]));
+    zip.file('your_instagram_activity/threads/following.json', JSON.stringify({ relationships_following: [f('threadsonly')] }));
+    const res = await parseZip(new File([await zip.generateAsync({ type: 'uint8array' })], 'x.zip'));
+    expect(res.followers.map((e) => e.u)).toEqual(['a']);
+    expect(res.following.map((e) => e.u).sort()).toEqual(['a', 'b']);
+  });
+
+  it('keeps going when one followers file is damaged', async () => {
+    const zip = new JSZip();
+    const f = (u: string) => ({ title: '', string_list_data: [{ value: u }] });
+    zip.file('connections/followers_and_following/followers_1.json', JSON.stringify([f('a')]));
+    zip.file('connections/followers_and_following/followers_2.json', '{broken');
+    zip.file('connections/followers_and_following/following.json', JSON.stringify({ relationships_following: [f('a')] }));
+    const res = await parseZip(new File([await zip.generateAsync({ type: 'uint8array' })], 'x.zip'));
+    expect(res.followers.map((e) => e.u)).toEqual(['a']);
+    expect(res.warnings.join(' ')).toMatch(/followers_2\.json/);
+  });
+
+  it('rejects a file that is not a ZIP', async () => {
+    await expect(parseZip(new File(['hello'], 'photo.zip'))).rejects.toThrow(/couldn't be opened as a ZIP/);
   });
 
   it('rejects a ZIP with no relationship data', async () => {
@@ -130,58 +168,3 @@ describe('metadata import', () => {
   });
 });
 
-import { normalizeCountry, summarizeGeo, heatLevel } from './geo';
-
-describe('geography', () => {
-  it('normalizes country codes and names, never guessing', () => {
-    expect(normalizeCountry('jp')).toBe('JP');
-    expect(normalizeCountry('JPN')).toBe('JP');
-    expect(normalizeCountry('Japan')).toBe('JP');
-    expect(normalizeCountry('UK')).toBe('GB');
-    expect(normalizeCountry('usa')).toBe('US');
-    expect(normalizeCountry('Türkiye')).toBe('TR');
-    expect(normalizeCountry('840')).toBe('US');
-    expect(normalizeCountry('Atlantis')).toBeNull();
-    expect(normalizeCountry('')).toBeNull();
-  });
-
-  it('imports country column at country level only', () => {
-    const { meta, countries, unrecognizedCountries } = importMetadataFile(
-      'username,country\nalex,"Paris, France"\nbea,JP\ncal,Narnia',
-      'loc.csv',
-    );
-    expect(meta.alex.country).toBe('FR');
-    expect(meta.bea.country).toBe('JP');
-    expect(meta.cal).toBeUndefined();
-    expect(countries).toBe(2);
-    expect(unrecognizedCountries).toBe(1);
-  });
-
-  it('ignores countries when geographic analytics are off', () => {
-    const { meta } = importMetadataFile('username,followers,country\nalex,10,JP', 'x.csv', { includeCountry: false });
-    expect(meta.alex.country).toBeUndefined();
-    expect(meta.alex.followerCount).toBe(10);
-  });
-
-  it('aggregates by country from user-provided data only', () => {
-    const s = snap(['a', 'b', 'c'], ['a', 'b', 'x', 'y']);
-    const m = {
-      a: { country: 'JP', source: 't', updatedAt: 0 },
-      b: { country: 'JP', source: 't', updatedAt: 0 },
-      c: { country: 'FR', source: 't', updatedAt: 0 },
-      x: { country: 'FR', source: 't', updatedAt: 0, confirmedRegular: true },
-    };
-    const a = analyze(s, m);
-    const followers = summarizeGeo(a, m, 'followers', 'all');
-    expect(followers.located).toBe(3);
-    expect(followers.total).toBe(3);
-    expect(followers.byCountry.get('JP')).toMatchObject({ followers: 2, mutual: 2, value: 2 });
-    expect(followers.byCountry.get('FR')).toMatchObject({ followers: 1, fans: 1, nonFollowBack: 1 });
-    const oneWay = summarizeGeo(a, m, 'following', 'one-way');
-    expect(oneWay.ranked.map((r) => [r.code, r.value])).toEqual([['FR', 1]]);
-    expect(oneWay.total).toBe(2); // x and y; y has no country
-    expect(oneWay.located).toBe(1);
-    expect(heatLevel(0, 5)).toBe(0);
-    expect(heatLevel(5, 5)).toBe(5);
-  });
-});

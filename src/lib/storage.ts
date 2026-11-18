@@ -1,72 +1,48 @@
 import type { Group, MetaMap, Settings, Snapshot } from './types';
 
 /**
- * Everything FOLLOWLY keeps lives on this device only:
- *   • IndexedDB "followly" / "snapshots" — usernames + follow timestamps per upload
- *   • localStorage — account metadata you confirmed, and settings
- * Uploaded files themselves are never stored.
+ * Imported data lives only for this browser tab (sessionStorage): it survives a reload,
+ * and is gone when you reset or close the tab. Uploaded files themselves are never stored,
+ * and nothing is ever sent to a server.
  */
 
-const DB_NAME = 'followly';
-const STORE = 'snapshots';
-const META_KEY = 'followly.meta.v1';
+const DB_NAME = 'followly'; // used by earlier versions; removed by "Clear all data"
+const SESSION_KEY = 'followly.session.v1';
 const SETTINGS_KEY = 'followly.settings.v1';
-const GROUPS_KEY = 'followly.groups.v1';
-const WATCH_KEY = 'followly.watch.v1';
 
-let memorySnapshots: Snapshot[] | null = null; // fallback when IndexedDB is unavailable
+let memorySnapshots: Snapshot[] = []; // fallback when sessionStorage is unavailable or full
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB unavailable'));
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE, { keyPath: 'id' });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+function readSession(): Snapshot[] {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as Snapshot[]) : memorySnapshots;
+  } catch {
+    return memorySnapshots;
+  }
 }
 
-async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T> | void): Promise<T | undefined> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const req = fn(t.objectStore(STORE));
-    t.oncomplete = () => { resolve(req ? req.result : undefined); db.close(); };
-    t.onerror = () => { reject(t.error); db.close(); };
-  });
+function writeSession(list: Snapshot[]) {
+  memorySnapshots = list;
+  try {
+    if (list.length) sessionStorage.setItem(SESSION_KEY, JSON.stringify(list));
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch { /* too large or blocked: memory only */ }
 }
 
 export async function loadSnapshots(): Promise<Snapshot[]> {
-  try {
-    return ((await tx<Snapshot[]>('readonly', (s) => s.getAll())) ?? []) as Snapshot[];
-  } catch {
-    return memorySnapshots ?? [];
-  }
+  return readSession();
 }
 
 export async function saveSnapshot(s: Snapshot): Promise<void> {
-  try {
-    await tx('readwrite', (st) => st.put(s));
-  } catch {
-    memorySnapshots = [...(memorySnapshots ?? []).filter((x) => x.id !== s.id), s];
-  }
+  writeSession([...readSession().filter((x) => x.id !== s.id), s]);
 }
 
 export async function deleteSnapshot(id: string): Promise<void> {
-  try {
-    await tx('readwrite', (st) => st.delete(id));
-  } catch {
-    memorySnapshots = (memorySnapshots ?? []).filter((x) => x.id !== id);
-  }
+  writeSession(readSession().filter((x) => x.id !== id));
 }
 
 export async function clearSnapshots(): Promise<void> {
-  try {
-    await tx('readwrite', (st) => st.clear());
-  } catch { /* ignore */ }
-  memorySnapshots = [];
+  writeSession([]);
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -84,25 +60,24 @@ function writeJson(key: string, value: unknown) {
   } catch { /* storage full or blocked: keep in memory only */ }
 }
 
-export const loadMeta = (): MetaMap => readJson<MetaMap>(META_KEY, {});
-export const saveMeta = (m: MetaMap) => writeJson(META_KEY, m);
+// Nothing about other accounts is kept beyond the session.
+export const loadMeta = (): MetaMap => ({});
+export const saveMeta = (_m: MetaMap) => undefined;
+export const loadGroups = (): Group[] => [];
+export const saveGroups = (_g: Group[]) => undefined;
+export const loadWatch = (): string[] => [];
+export const saveWatch = (_w: string[]) => undefined;
 
-export const loadGroups = (): Group[] => readJson<Group[]>(GROUPS_KEY, []);
-export const saveGroups = (g: Group[]) => writeJson(GROUPS_KEY, g);
-export const loadWatch = (): string[] => readJson<string[]>(WATCH_KEY, []);
-export const saveWatch = (w: string[]) => writeJson(WATCH_KEY, w);
-
-export const DEFAULT_SETTINGS: Settings = { historyEnabled: true, geoEnabled: true };
-export const loadSettings = (): Settings => ({ ...DEFAULT_SETTINGS, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) });
+export const DEFAULT_SETTINGS: Settings = { historyEnabled: false, geoEnabled: false };
+// Only the latest upload is kept: the three lists come from your newest export.
+export const loadSettings = (): Settings => ({ ...readJson<Partial<Settings>>(SETTINGS_KEY, {}), ...DEFAULT_SETTINGS });
 export const saveSettings = (s: Settings) => writeJson(SETTINGS_KEY, s);
 
 export async function clearAllData() {
   await clearSnapshots();
   try {
-    localStorage.removeItem(META_KEY);
-    localStorage.removeItem(SETTINGS_KEY);
-    localStorage.removeItem(GROUPS_KEY);
-    localStorage.removeItem(WATCH_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+    for (const k of [SETTINGS_KEY, 'followly.meta.v1', 'followly.groups.v1', 'followly.watch.v1']) localStorage.removeItem(k);
     indexedDB?.deleteDatabase(DB_NAME);
   } catch { /* ignore */ }
 }
